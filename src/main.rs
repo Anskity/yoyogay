@@ -7,6 +7,8 @@ enum Error {
 
 fn main() -> Result<(), Error> {
     let _ = organize_project("./test_project").map_err(|e| Error::OrganizeError(e))?;
+    let tokens = tokenize("2 + 2 = 22").unwrap();
+    dbg!(tokens);
 
     Ok(())
 }
