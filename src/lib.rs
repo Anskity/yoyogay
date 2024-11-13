@@ -2,6 +2,7 @@ pub mod ast;
 pub mod organizer;
 pub mod text_data;
 pub mod tokenizer;
+pub mod parser;
 
 pub trait Boxxable {
     fn to_box(self) -> Box<Self>
