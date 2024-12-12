@@ -1,13 +1,129 @@
-use std::collections::HashMap;
-
-use crate::ast::OperatorType;
+use crate::ast::{OperatorType, VariableModificationType};
+use crate::parser::utils::delimiter_checker::DelimiterChecker;
 use crate::text_data::{TextPos, TextRange};
 use crate::Boxxable;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub data: TokenData,
     pub text_range: TextRange,
+}
+
+pub trait TokensUtils {
+    fn split_tks<T: AsRef<TokenData>>(&self, splitter: T) -> Vec<&[Token]>;
+    fn find_free<T: AsRef<TokenData>>(&self, search_tk: T) -> Option<usize>;
+    fn find_pair(&self, pos: usize) -> Option<usize>;
+}
+
+impl TokensUtils for [Token] {
+    fn split_tks<'a, T: AsRef<TokenData>>(&'a self, splitter: T) -> Vec<&'a [Token]> {
+        let splitter = splitter.as_ref();
+        let mut slices: Vec<&[Token]> = Vec::new();
+        let mut last_idx: usize = 0;
+
+        for (i, _) in self.iter().enumerate() {
+            let tk = &self[i];
+
+            if tk.data == *splitter {
+                slices.push(&self[last_idx..i]);
+                last_idx = i + 1;
+            } else if i == self.len() - 1 {
+                slices.push(&self[last_idx..]);
+            }
+        }
+
+        slices
+    }
+    fn find_free<T: AsRef<TokenData>>(&self, search_tk: T) -> Option<usize> {
+        enum FindDelimiterCheckerMode {
+            Normal,
+            Curly,
+            Paren,
+            Brack,
+        }
+        let search_tk = search_tk.as_ref();
+
+        assert!(!matches!(
+            search_tk,
+                | TokenData::CloseParenthesis
+                | TokenData::CloseCurly
+                | TokenData::CloseBracket
+        ));
+
+        let mode = match search_tk {
+            TokenData::OpenParenthesis => FindDelimiterCheckerMode::Paren,
+            TokenData::OpenCurly => FindDelimiterCheckerMode::Curly,
+            TokenData::OpenBracket => FindDelimiterCheckerMode::Brack,
+            _ => FindDelimiterCheckerMode::Normal,
+        };
+
+        let mut delimiter_checker = DelimiterChecker::new();
+        for (i, tk) in self.iter().enumerate() {
+            delimiter_checker.check(&tk).ok()?;
+            if tk.data == *search_tk && delimiter_checker.is_free() {
+                return Some(i);
+            }
+
+            if matches!((&tk.data, &mode, delimiter_checker.paren_level, delimiter_checker.brack_level, delimiter_checker.curly_level),
+                        (TokenData::OpenParenthesis, FindDelimiterCheckerMode::Paren, 1, 0, 0) |
+                        (TokenData::OpenBracket, FindDelimiterCheckerMode::Brack, 0, 1, 0) |
+                        (TokenData::OpenCurly, FindDelimiterCheckerMode::Curly, 0, 0, 1)
+                        ) {
+                return Some(i);
+            }
+        }
+
+        None
+    }
+
+    fn find_pair(&self, mut pos: usize) -> Option<usize> {
+        assert!(pos < self.len());
+
+        assert!(matches!(
+            &self[pos].data,
+            TokenData::OpenParenthesis
+                | TokenData::OpenCurly
+                | TokenData::OpenBracket
+                | TokenData::CloseParenthesis
+                | TokenData::CloseCurly
+                | TokenData::CloseBracket
+        ));
+        let rev = match &self[pos].data {
+            TokenData::OpenParenthesis | TokenData::OpenCurly | TokenData::OpenBracket => false,
+            TokenData::CloseParenthesis | TokenData::CloseCurly | TokenData::CloseBracket => true,
+            _ => panic!("?????????"),
+        };
+
+        let mut delimiter_checker = DelimiterChecker::new();
+        loop {
+            let tk = &self[pos];
+            if rev {
+                delimiter_checker.check_reverse(tk).ok()?;
+            } else {
+                delimiter_checker.check(tk).ok()?;
+            }
+
+            if delimiter_checker.is_free() {
+                return Some(pos);
+            }
+
+            if rev {
+                pos -= 1;
+            } else {
+                pos += 1;
+            }
+
+            if pos == 0 && rev {
+                break;
+            }
+
+            if pos == self.len() && !rev {
+                break;
+            }
+        }
+
+        None
+    }
 }
 
 impl ToString for Token {
@@ -17,10 +133,15 @@ impl ToString for Token {
             TokenData::NotEquals => "!=".to_string(),
             TokenData::IsEquals => "==".to_string(),
             TokenData::Equals => "=".to_string(),
+            TokenData::IncreaseBy => "+=".to_string(),
+            TokenData::DecreaseBy => "-=".to_string(),
+            TokenData::MultiplyBy => "*=".to_string(),
+            TokenData::DivideBy => "/=".to_string(),
             TokenData::Add => "+".to_string(),
             TokenData::Sub => "-".to_string(),
             TokenData::Mul => "*".to_string(),
             TokenData::Div => "/".to_string(),
+            TokenData::Or => "||".to_string(),
             TokenData::OpenParenthesis => "(".to_string(),
             TokenData::CloseParenthesis => ")".to_string(),
             TokenData::OpenCurly => "{".to_string(),
@@ -30,8 +151,12 @@ impl ToString for Token {
             TokenData::Comma => ",".to_string(),
             TokenData::Semilicon => ";".to_string(),
             TokenData::Pipe => "|".to_string(),
+            TokenData::Dot => ".".to_string(),
             TokenData::Var => "var".to_string(),
             TokenData::Const => "const".to_string(),
+            TokenData::Fn => "fn".to_string(),
+            TokenData::If => "if".to_string(),
+            TokenData::Else => "else".to_string(),
             TokenData::Identifier(id) => id.clone(),
             TokenData::NumericLiteral(num) => num.to_string(),
         }
@@ -47,6 +172,10 @@ pub enum TokenData {
     Sub,
     Mul,
     Div,
+    IncreaseBy,
+    DecreaseBy,
+    MultiplyBy,
+    DivideBy,
 
     OpenParenthesis,
     CloseParenthesis,
@@ -56,12 +185,17 @@ pub enum TokenData {
     CloseBracket,
     Var,
     Const,
+    Fn,
+    If,
+    Else,
     ModAccess,
     NotEquals,
     IsEquals,
     Comma,
     Semilicon,
     Pipe,
+    Dot,
+    Or,
 }
 
 impl TokenData {
@@ -71,8 +205,28 @@ impl TokenData {
             TokenData::Sub => Some(OperatorType::Sub),
             TokenData::Mul => Some(OperatorType::Mul),
             TokenData::Div => Some(OperatorType::Div),
-            _ => None
+            TokenData::NotEquals => Some(OperatorType::NotEquals),
+            TokenData::IsEquals => Some(OperatorType::IsEquals),
+            TokenData::Or => Some(OperatorType::Or),
+            _ => None,
         }
+    }
+
+    pub fn variable_modification_type(&self) -> Option<VariableModificationType> {
+        match self {
+            TokenData::Equals => Some(VariableModificationType::Set),
+            TokenData::IncreaseBy => Some(VariableModificationType::IncreaseBy),
+            TokenData::DecreaseBy => Some(VariableModificationType::DecreaseBy),
+            TokenData::MultiplyBy => Some(VariableModificationType::MultiplyBy),
+            TokenData::DivideBy => Some(VariableModificationType::DivideBy),
+            _ => None,
+        }
+    }
+}
+
+impl AsRef<TokenData> for TokenData {
+    fn as_ref(&self) -> &TokenData {
+        self
     }
 }
 
@@ -171,6 +325,9 @@ impl TokenRecognizer for IdetifierRecognizer {
         let token_data = match id.as_str() {
             "const" => TokenData::Const,
             "var" => TokenData::Var,
+            "fn" => TokenData::Fn,
+            "if" => TokenData::If,
+            "else" => TokenData::Else,
             _ => TokenData::Identifier(id),
         };
 
@@ -199,16 +356,21 @@ impl TokenRecognizer for NumericLiteralRecognizer {
 }
 
 struct SymbolRecognizer {
-    map: HashMap<String, TokenData>,
+    vec: Vec<(String, TokenData)>,
 }
 
 impl SymbolRecognizer {
     pub fn new() -> Self {
         SymbolRecognizer {
-            map: HashMap::from([
+            vec: Vec::from([
                 ("::".to_string(), TokenData::ModAccess),
                 ("!=".to_string(), TokenData::NotEquals),
                 ("==".to_string(), TokenData::IsEquals),
+                ("+=".to_string(), TokenData::IncreaseBy),
+                ("-=".to_string(), TokenData::DecreaseBy),
+                ("*=".to_string(), TokenData::MultiplyBy),
+                ("/=".to_string(), TokenData::DivideBy),
+                ("||".to_string(), TokenData::Or),
                 ("=".to_string(), TokenData::Equals),
                 ("+".to_string(), TokenData::Add),
                 ("-".to_string(), TokenData::Sub),
@@ -223,6 +385,7 @@ impl SymbolRecognizer {
                 (",".to_string(), TokenData::Comma),
                 (";".to_string(), TokenData::Semilicon),
                 ("|".to_string(), TokenData::Pipe),
+                (".".to_string(), TokenData::Dot),
             ]),
         }
     }
@@ -230,17 +393,17 @@ impl SymbolRecognizer {
 
 impl TokenRecognizer for SymbolRecognizer {
     fn recognize(&self, code_left: &str) -> bool {
-        self.map.keys().any(|k| code_left[0..k.len()] == *k)
+        self.vec.iter().any(|(k, _)| code_left[0..k.len()] == *k)
     }
 
     fn get_token(&self, code_left: &str) -> (TokenData, usize) {
-        let symbol = self
-            .map
-            .keys()
-            .find(|k| code_left[0..k.len()] == **k)
+        let idx = self
+            .vec
+            .iter()
+            .position(|(k, _)| code_left[0..k.len()] == **k)
             .expect("Symbol not found");
-        let token_data = self.map.get(symbol).expect("Token Data not found");
+        let (key, token_data) = self.vec.get(idx).expect("Token Data not found");
 
-        (token_data.clone(), symbol.len())
+        (token_data.clone(), key.len())
     }
 }

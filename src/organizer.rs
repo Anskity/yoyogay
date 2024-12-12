@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 pub mod object;
 
+#[derive(Debug)]
 pub struct Project {
     pub objects: Vec<object::Object>,
 }

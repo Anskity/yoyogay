@@ -1,31 +1,28 @@
 use crate::{
     ast::{Node, NodeData, OperatorType},
-    text_data::BorrowedTextRange,
-    tokenizer::{Token, TokenData},
+    parser::{BorrowedTextRange, ParseErrorData},
+    text_data::TextRange,
+    tokenizer::{Token, TokenData, TokensUtils},
     Boxxable,
 };
 
 use super::ParseError;
 
 pub fn parse_expr<'a>(tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
-    dbg!(tokens);
     let mut tokens_to_parse: Vec<&[Token]> = Vec::new();
     let mut operators: Vec<OperatorType> = Vec::new();
     let mut prev_idx: usize = 0;
 
     for (i, tk) in tokens.iter().enumerate() {
-        let is_operator = matches!(
-            tk.data,
-            TokenData::Add | TokenData::Sub | TokenData::Mul | TokenData::Div
-        );
+        let is_operator = tk.data.operator_type().is_some() && i != 0;
         let at_end = i == tokens.len() - 1;
         if is_operator || at_end {
             if is_operator {
                 operators.push(tk.data.operator_type().expect("Token wasnt an operator"));
             }
 
-            let range = if i == tokens.len() - 1 {
-                tokens.len() - 1..tokens.len()
+            let range = if at_end {
+                prev_idx..tokens.len()
             } else {
                 prev_idx..i
             };
@@ -49,10 +46,16 @@ pub fn parse_expr<'a>(tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
         &mut operators,
         &[OperatorType::Add, OperatorType::Sub],
     );
+    parse_operators(
+        &mut nodes,
+        &mut operators,
+        &[OperatorType::NotEquals, OperatorType::IsEquals],
+    );
+    parse_operators(&mut nodes, &mut operators, &[OperatorType::Or]);
 
-    dbg!(nodes);
+    assert_eq!(nodes.len(), 1);
 
-    todo!()
+    Ok(nodes.remove(0))
 }
 
 fn parse_operators<'a>(
@@ -90,15 +93,152 @@ fn parse_operators<'a>(
 
 // TODO: Better Error Handling
 fn parse_expr_component(tokens: &[Token]) -> Result<Node, ParseError> {
-    if tokens.len() == 1 {
-        let text_range = BorrowedTextRange::from(&tokens[0].text_range);
-        let data = match &tokens[0].data {
-            TokenData::Identifier(id) => NodeData::Identifier(&id),
-            TokenData::NumericLiteral(num) => NodeData::NumericLiteral(&num),
-            _ => todo!(),
-        };
+    assert_ne!(tokens.len(), 0);
 
-        return Ok(Node {text_range, data: data.to_box()});
+    if tokens.len() == 1 {
+        return parse_primary(&tokens[0]);
     }
+
+    if let TokenData::Sub = tokens[0].data {
+        let text_range = BorrowedTextRange::from(tokens);
+        let data = NodeData::Neg(parse_expr(&tokens[1..])?).to_box();
+        return Ok(Node { text_range, data });
+    }
+
+    if let TokenData::OpenParenthesis = tokens[0].data {
+        if tokens
+            .find_pair(0)
+            .is_some_and(|idx| idx == tokens.len() - 1)
+        {
+            return parse_expr(&tokens[1..tokens.len() - 1]);
+        }
+    }
+
+    if tokens.find_free(&TokenData::Comma).is_some() {
+        return parse_tuple(tokens);
+    }
+
+    if let TokenData::Identifier(_) = &tokens[0].data {
+        let node = parse_primary(&tokens[0])?;
+        return parse_chain(node, &tokens[1..]);
+    }
+
+    dbg!(tokens);
     todo!()
+}
+
+fn parse_primary(tk: &Token) -> Result<Node, ParseError> {
+    let text_range = BorrowedTextRange::from(&tk.text_range);
+    let data = match &tk.data {
+        TokenData::Identifier(id) => NodeData::Identifier(&id),
+        TokenData::NumericLiteral(num) => NodeData::NumericLiteral(&num),
+        _ => panic!("UNEXPECTED: {:?}", tk),
+    };
+
+    Ok(Node {
+        text_range,
+        data: data.to_box(),
+    })
+}
+
+fn parse_function_call<'a>(
+    func_node: Node<'a>,
+    tokens: &'a [Token],
+) -> Result<Node<'a>, ParseError> {
+    assert!(tokens.len() > 1);
+    assert!(matches!(tokens[0].data, TokenData::OpenParenthesis));
+
+    let close_paren = tokens.find_pair(0).unwrap();
+
+    let args_tks = &tokens[1..close_paren].split_tks(&TokenData::Comma);
+    let args_nodes: Result<Vec<Node>, ParseError> =
+        args_tks.into_iter().map(|tks| parse_expr(tks)).collect();
+
+    let text_range = BorrowedTextRange::from(tokens);
+    let data = NodeData::FunctionCall(func_node, args_nodes?);
+    let node = Node {
+        text_range,
+        data: data.to_box(),
+    };
+
+    if close_paren < tokens.len() - 1 {
+        parse_chain(node, &tokens[close_paren + 1..])
+    } else {
+        Ok(node)
+    }
+}
+
+fn parse_struct_access<'a>(
+    struct_node: Node<'a>,
+    tokens: &'a [Token],
+) -> Result<Node<'a>, ParseError> {
+    assert_eq!(tokens[0].data, TokenData::Dot);
+    if tokens.get(1).is_none() {
+        return Err(ParseError::new_unexpected_token(tokens[0].clone()));
+    }
+
+    if let TokenData::Identifier(_) = &tokens[1].data {
+        let text_range = BorrowedTextRange::from((
+            &struct_node.text_range,
+            &BorrowedTextRange::from(&tokens[0..2]),
+        ));
+        let data = NodeData::StructAccess(struct_node, parse_expr(&tokens[1..=1])?);
+        let node = Node {
+            data: data.to_box(),
+            text_range,
+        };
+        if tokens.len() == 2 {
+            Ok(node)
+        } else {
+            parse_chain(node, &tokens[2..])
+        }
+    } else {
+        Err(ParseError::new_unexpected_token(tokens[1].clone()))
+    }
+}
+
+fn parse_array_access<'a>(arr_node: Node<'a>, tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
+    assert_eq!(tokens[0].data, TokenData::OpenBracket);
+
+    let end_brack = tokens.find_pair(0).ok_or_else(|| {
+        let text_range: TextRange = BorrowedTextRange::from(tokens).into();
+        ParseError::new(ParseErrorData::UnclosedBracket, text_range)
+    })?;
+
+    let idx_node = parse_expr(&tokens[1..end_brack])?;
+
+    let text_range = BorrowedTextRange::from((
+        &arr_node.text_range,
+        &BorrowedTextRange::from(&tokens[0..=end_brack]),
+    ));
+    let data = NodeData::ArrayAccess(arr_node, idx_node).to_box();
+    let node = Node { data, text_range };
+
+    if end_brack == tokens.len() - 1 {
+        Ok(node)
+    } else {
+        parse_chain(node, &tokens[end_brack + 1..])
+    }
+}
+
+fn parse_chain<'a>(node: Node<'a>, tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
+    assert!(tokens.len() > 1);
+    match tokens[0].data {
+        TokenData::OpenParenthesis => parse_function_call(node, tokens),
+        TokenData::Dot => parse_struct_access(node, tokens),
+        TokenData::OpenBracket => parse_array_access(node, tokens),
+        _ => todo!(),
+    }
+}
+
+fn parse_tuple<'a>(tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
+    let nodes: Result<Vec<Node<'a>>, ParseError> = tokens
+        .split_tks(&TokenData::Comma)
+        .iter()
+        .map(|tks| parse_expr(tks))
+        .collect();
+    let text_range = BorrowedTextRange::from(tokens);
+    let data = NodeData::Tuple(nodes?).to_box();
+
+    Ok(Node { data, text_range })
 }

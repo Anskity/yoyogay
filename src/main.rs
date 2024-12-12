@@ -1,6 +1,4 @@
-use std::fs;
-
-use yoyogay::{organizer::{organize_project, OrganizeError}, parser::expr::parse_expr, tokenizer::{tokenize, TokenizeError}};
+use yoyogay::{organizer::{organize_project, OrganizeError}, parser::{parse, ParseError}, tokenizer::{tokenize, TokenizeError}};
 
 #[derive(Debug)]
 enum Error {
@@ -8,6 +6,8 @@ enum Error {
     OrganizeError(OrganizeError),
     #[allow(unused)]
     TokenizeError(TokenizeError),
+    #[allow(unused)]
+    ParseError(ParseError),
 }
 
 impl From<TokenizeError> for Error {
@@ -22,18 +22,25 @@ impl From<OrganizeError> for Error {
     }
 }
 
+impl From<ParseError> for Error {
+    fn from(value: ParseError) -> Self {
+        Error::ParseError(value)
+    }
+}
+
 fn main() -> Result<(), Error> {
     let project = organize_project("./test_project").map_err(|e| Error::OrganizeError(e))?;
+    for object in &project.objects {
+        let events_to_parse = ["create", "step"];
 
-    for object in project.objects {
-        for (_, src) in object.events.iter() {
-            let tokens = tokenize(src)?;
-            println!("Tokens: {}", tokens.iter().map(|tk| tk.to_string()).reduce(|acc, e| format!("{acc} {e}")).unwrap());
+        for event in events_to_parse {
+            println!("{event}");
+            let tks = tokenize(object.events.get(event).unwrap())?;
+            let node = parse(&tks).unwrap();
+
+            println!("{}", node.to_string());
         }
     }
-
-    let tks = tokenize(&fs::read_to_string("./code.gmpp").unwrap())?;
-    dbg!(parse_expr(&tks));
 
     Ok(())
 }

@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use crate::tokenizer::Token;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TextRange {
     pub start: TextPos,
     pub end: TextPos,
@@ -38,7 +40,36 @@ impl<'a> From<&'a TextRange> for BorrowedTextRange<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+impl<'a> From<&'a [Token]> for BorrowedTextRange<'a> {
+    fn from(value: &'a [Token]) -> Self {
+        BorrowedTextRange {
+            start: &value[0].text_range.start,
+            end: &value.last().unwrap().text_range.end,
+        }
+    }
+}
+
+impl<'a> From<&'a Token> for BorrowedTextRange<'a> {
+    fn from(value: &'a Token) -> Self {
+        BorrowedTextRange {
+            start: &value.text_range.start,
+            end: &value.text_range.end,
+        }
+    }
+}
+
+impl<'a, T:Into<BorrowedTextRange<'a>>> From<T> for TextRange {
+    fn from(value: T) -> Self {
+        let borrowed: BorrowedTextRange<'a> = value.into();
+
+        TextRange {
+            start: borrowed.start.clone(),
+            end: borrowed.end.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TextPos {
     pub line: usize,
     pub pos: usize,
