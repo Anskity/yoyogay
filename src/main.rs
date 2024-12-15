@@ -1,4 +1,4 @@
-use yoyogay::{organizer::{organize_project, OrganizeError}, parser::{parse, ParseError}, tokenizer::{tokenize, TokenizeError}};
+use yoyogay::{gamemaker::GameMakerProject, organizer::{OrganizeError, YoyogayProject}, parser::{parse, ParseError}, tokenizer::{tokenize, TokenizeError}};
 
 #[derive(Debug)]
 enum Error {
@@ -29,18 +29,8 @@ impl From<ParseError> for Error {
 }
 
 fn main() -> Result<(), Error> {
-    let project = organize_project("./test_project").map_err(|e| Error::OrganizeError(e))?;
-    for object in &project.objects {
-        let events_to_parse = ["create", "step"];
-
-        for event in events_to_parse {
-            println!("{event}");
-            let tks = tokenize(object.events.get(event).unwrap())?;
-            let node = parse(&tks).unwrap();
-
-            println!("{}", node.to_string());
-        }
-    }
-
+    let yoyogay_project = YoyogayProject::create_from_directory("./test_project").map_err(|e| Error::OrganizeError(e))?;
+    let gamemaker_project = GameMakerProject::new_from_yoyogay_project(&yoyogay_project);
+    gamemaker_project.write_in_fs("./output_project").unwrap();
     Ok(())
 }

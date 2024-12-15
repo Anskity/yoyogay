@@ -1,4 +1,4 @@
-use crate::ast::{OperatorType, VariableModificationType};
+use crate::ast::{PropertyAccessType, OperatorType, VariableModificationType};
 use crate::parser::utils::delimiter_checker::DelimiterChecker;
 use crate::text_data::{TextPos, TextRange};
 use crate::Boxxable;
@@ -20,11 +20,13 @@ impl TokensUtils for [Token] {
         let splitter = splitter.as_ref();
         let mut slices: Vec<&[Token]> = Vec::new();
         let mut last_idx: usize = 0;
+        let mut delimiter_checker = DelimiterChecker::new();
 
         for (i, _) in self.iter().enumerate() {
             let tk = &self[i];
+            let _ = delimiter_checker.check(tk);
 
-            if tk.data == *splitter {
+            if tk.data == *splitter && delimiter_checker.is_free() {
                 slices.push(&self[last_idx..i]);
                 last_idx = i + 1;
             } else if i == self.len() - 1 {
@@ -154,6 +156,7 @@ impl ToString for Token {
             TokenData::Dot => ".".to_string(),
             TokenData::Var => "var".to_string(),
             TokenData::Const => "const".to_string(),
+            TokenData::Let => "let".to_string(),
             TokenData::Fn => "fn".to_string(),
             TokenData::If => "if".to_string(),
             TokenData::Else => "else".to_string(),
@@ -183,6 +186,7 @@ pub enum TokenData {
     CloseCurly,
     OpenBracket,
     CloseBracket,
+    Let,
     Var,
     Const,
     Fn,
@@ -222,6 +226,14 @@ impl TokenData {
             _ => None,
         }
     }
+
+    pub fn property_access_type(&self) -> Option<PropertyAccessType> {
+        match self {
+            TokenData::Dot => Some(PropertyAccessType::Struct),
+            TokenData::ModAccess => Some(PropertyAccessType::Mod),
+            _ => None,
+        }
+    } 
 }
 
 impl AsRef<TokenData> for TokenData {
@@ -325,6 +337,7 @@ impl TokenRecognizer for IdetifierRecognizer {
         let token_data = match id.as_str() {
             "const" => TokenData::Const,
             "var" => TokenData::Var,
+            "let" => TokenData::Let,
             "fn" => TokenData::Fn,
             "if" => TokenData::If,
             "else" => TokenData::Else,

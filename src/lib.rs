@@ -4,6 +4,7 @@ pub mod text_data;
 pub mod tokenizer;
 pub mod parser;
 pub mod compiler;
+pub mod gamemaker;
 
 pub mod tests;
 

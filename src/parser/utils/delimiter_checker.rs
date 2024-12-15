@@ -1,4 +1,4 @@
-use crate::{text_data::TextRange, tokenizer::{Token, TokenData}};
+use crate::{tokenizer::{Token, TokenData}};
 
 pub struct DelimiterChecker {
     pub paren_level: usize,
@@ -7,9 +7,9 @@ pub struct DelimiterChecker {
 }
 
 pub enum DelimiterCheckerError<'a> {
-    UnexpectedClosingParenthesis(&'a TextRange),
-    UnexpectedClosingCurlyBrace(&'a TextRange),
-    UnexpectedClosingBracket(&'a TextRange),
+    UnexpectedClosingParenthesis(&'a Token),
+    UnexpectedClosingCurlyBrace(&'a Token),
+    UnexpectedClosingBracket(&'a Token),
 }
 
 impl DelimiterChecker {
@@ -35,21 +35,21 @@ impl DelimiterChecker {
                 if self.paren_level > 0 {
                     self.paren_level -= 1;
                 } else {
-                    return Err(DelimiterCheckerError::UnexpectedClosingParenthesis(&token.text_range));
+                    return Err(DelimiterCheckerError::UnexpectedClosingParenthesis(&token));
                 }
             }
             TokenData::CloseBracket => {
                 if self.brack_level > 0 {
                     self.brack_level -= 1;
                 } else {
-                    return Err(DelimiterCheckerError::UnexpectedClosingBracket(&token.text_range));
+                    return Err(DelimiterCheckerError::UnexpectedClosingBracket(&token));
                 }
             }
             TokenData::CloseCurly => {
                 if self.curly_level > 0 {
                     self.curly_level -= 1;
                 } else {
-                    return Err(DelimiterCheckerError::UnexpectedClosingCurlyBrace(&token.text_range));
+                    return Err(DelimiterCheckerError::UnexpectedClosingCurlyBrace(&token));
                 }
             }
 
@@ -69,21 +69,21 @@ impl DelimiterChecker {
                 if self.paren_level > 0 {
                     self.paren_level -= 1;
                 } else {
-                    return Err(DelimiterCheckerError::UnexpectedClosingParenthesis(&token.text_range));
+                    return Err(DelimiterCheckerError::UnexpectedClosingParenthesis(&token));
                 }
             }
             TokenData::OpenBracket => {
                 if self.brack_level > 0 {
                     self.brack_level -= 1;
                 } else {
-                    return Err(DelimiterCheckerError::UnexpectedClosingBracket(&token.text_range));
+                    return Err(DelimiterCheckerError::UnexpectedClosingBracket(&token));
                 }
             }
             TokenData::OpenCurly => {
                 if self.curly_level > 0 {
                     self.curly_level -= 1;
                 } else {
-                    return Err(DelimiterCheckerError::UnexpectedClosingCurlyBrace(&token.text_range));
+                    return Err(DelimiterCheckerError::UnexpectedClosingCurlyBrace(&token));
                 }
             }
 

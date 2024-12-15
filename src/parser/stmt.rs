@@ -9,7 +9,7 @@ use crate::{
 use super::ParseError;
 
 pub fn parse_stmt<'a>(tokens: &'a [Token]) -> Result<(Node<'a>, usize), ParseError> {
-    if matches!(&tokens[0].data, TokenData::Const | TokenData::Var) {
+    if matches!(&tokens[0].data, TokenData::Const | TokenData::Var | TokenData::Let) {
         let semilicon = tokens.find_free(&TokenData::Semilicon).ok_or_else(|| {
             let text_data = BorrowedTextRange::from(tokens);
             ParseError::new(ParseErrorData::MissingSemilicon, text_data.into())
@@ -41,7 +41,6 @@ pub fn parse_stmt<'a>(tokens: &'a [Token]) -> Result<(Node<'a>, usize), ParseErr
         ));
     }
 
-    dbg!(tokens);
     panic!()
 }
 

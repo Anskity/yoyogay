@@ -17,7 +17,6 @@ pub enum NodeData<'a> {
     String(&'a String),
     BinaryExpr(Node<'a>, &'a OperatorType, Node<'a>),
     Tuple(Vec<Node<'a>>),
-    ModAccess(Node<'a>, Node<'a>),
     FunctionDeclaration(Node<'a>, Vec<Node<'a>>, Node<'a>),
     FunctionCall(Node<'a>, Vec<Node<'a>>),
     FunctionParemeter(Node<'a>),
@@ -26,6 +25,7 @@ pub enum NodeData<'a> {
     VariableDeclaration(DeclarationType, Node<'a>, Node<'a>),
     VariableModification(Node<'a>, VariableModificationType, Node<'a>),
     StructAccess(Node<'a>, Node<'a>),
+    ModAccess(Node<'a>, Node<'a>),
     ArrayAccess(Node<'a>, Node<'a>),
     Neg(Node<'a>),
 }
@@ -34,6 +34,7 @@ pub enum NodeData<'a> {
 pub enum DeclarationType {
     Const,
     Var,
+    Let,
 }
 
 impl<'a> TryFrom<&'a Token> for DeclarationType {
@@ -94,6 +95,12 @@ impl ToString for VariableModificationType {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum PropertyAccessType {
+    Struct,
+    Mod,
+}
+
 impl<'a> ToString for Node<'a> {
     fn to_string(&self) -> String {
         match &*self.data {
@@ -111,6 +118,9 @@ impl<'a> ToString for Node<'a> {
             }
             NodeData::StructAccess(struct_node, prop) => {
                 format!("{}.{}", struct_node.to_string(), prop.to_string())
+            }
+            NodeData::ModAccess(mod_node, prop) => {
+                format!("{}.{}", mod_node.to_string(), prop.to_string())
             }
             NodeData::ArrayAccess(arr_node, idx_node) => {
                 format!("{}[{}]", arr_node.to_string(), idx_node.to_string())
@@ -209,6 +219,7 @@ impl ToString for DeclarationType {
         match self {
             DeclarationType::Var => "var".to_string(),
             DeclarationType::Const => "const".to_string(),
+            DeclarationType::Let => "let".to_string(),
         }
     }
 }

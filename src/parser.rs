@@ -1,4 +1,5 @@
 use stmt::parse_stmt;
+use utils::delimiter_checker::DelimiterCheckerError;
 
 use crate::{
     ast::{Node, NodeData},
@@ -34,6 +35,16 @@ impl ParseError {
         ParseError {
             data: ParseErrorData::UnexpectedEOF,
             text_range: range.into(),
+        }
+    }
+}
+
+impl From<DelimiterCheckerError<'_>> for ParseError {
+    fn from(checker: DelimiterCheckerError) -> ParseError {
+        match checker {
+            DelimiterCheckerError::UnexpectedClosingParenthesis(token) => ParseError::new_unexpected_token(token.clone()),
+            DelimiterCheckerError::UnexpectedClosingCurlyBrace(token) => ParseError::new_unexpected_token(token.clone()),
+            DelimiterCheckerError::UnexpectedClosingBracket(token) => ParseError::new_unexpected_token(token.clone()),
         }
     }
 }

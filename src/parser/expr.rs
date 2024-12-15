@@ -1,6 +1,6 @@
 use crate::{
-    ast::{Node, NodeData, OperatorType},
-    parser::{BorrowedTextRange, ParseErrorData},
+    ast::{Node, NodeData, OperatorType, PropertyAccessType},
+    parser::{utils::delimiter_checker::DelimiterChecker, BorrowedTextRange, ParseErrorData},
     text_data::TextRange,
     tokenizer::{Token, TokenData, TokensUtils},
     Boxxable,
@@ -12,11 +12,18 @@ pub fn parse_expr<'a>(tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
     let mut tokens_to_parse: Vec<&[Token]> = Vec::new();
     let mut operators: Vec<OperatorType> = Vec::new();
     let mut prev_idx: usize = 0;
+    let mut delimiter_checker = DelimiterChecker::new();
+
+    if tokens.find_free(TokenData::Comma).is_some() {
+        return parse_tuple(tokens);
+    }
 
     for (i, tk) in tokens.iter().enumerate() {
         let is_operator = tk.data.operator_type().is_some() && i != 0;
+        delimiter_checker.check(tk)?;
+        
         let at_end = i == tokens.len() - 1;
-        if is_operator || at_end {
+        if (is_operator && delimiter_checker.is_free()) || at_end {
             if is_operator {
                 operators.push(tk.data.operator_type().expect("Token wasnt an operator"));
             }
@@ -123,7 +130,6 @@ fn parse_expr_component(tokens: &[Token]) -> Result<Node, ParseError> {
         return parse_chain(node, &tokens[1..]);
     }
 
-    dbg!(tokens);
     todo!()
 }
 
@@ -168,11 +174,12 @@ fn parse_function_call<'a>(
     }
 }
 
-fn parse_struct_access<'a>(
+fn parse_property_access<'a>(
     struct_node: Node<'a>,
     tokens: &'a [Token],
+    property_access_type: PropertyAccessType,
 ) -> Result<Node<'a>, ParseError> {
-    assert_eq!(tokens[0].data, TokenData::Dot);
+    assert!(tokens[0].data.property_access_type().is_some());
     if tokens.get(1).is_none() {
         return Err(ParseError::new_unexpected_token(tokens[0].clone()));
     }
@@ -182,7 +189,11 @@ fn parse_struct_access<'a>(
             &struct_node.text_range,
             &BorrowedTextRange::from(&tokens[0..2]),
         ));
-        let data = NodeData::StructAccess(struct_node, parse_expr(&tokens[1..=1])?);
+        let prop_node = parse_expr(&tokens[1..=1])?;
+        let data = match property_access_type {
+            PropertyAccessType::Struct => NodeData::StructAccess(struct_node, prop_node),
+            PropertyAccessType::Mod => NodeData::ModAccess(struct_node, prop_node),
+        };
         let node = Node {
             data: data.to_box(),
             text_range,
@@ -225,7 +236,8 @@ fn parse_chain<'a>(node: Node<'a>, tokens: &'a [Token]) -> Result<Node<'a>, Pars
     assert!(tokens.len() > 1);
     match tokens[0].data {
         TokenData::OpenParenthesis => parse_function_call(node, tokens),
-        TokenData::Dot => parse_struct_access(node, tokens),
+        TokenData::Dot => parse_property_access(node, tokens, PropertyAccessType::Struct),
+        TokenData::ModAccess => parse_property_access(node, tokens, PropertyAccessType::Mod),
         TokenData::OpenBracket => parse_array_access(node, tokens),
         _ => todo!(),
     }
