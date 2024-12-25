@@ -1,6 +1,6 @@
 use crate::{
     ast::{DeclarationType, Node, NodeData, VariableModificationType},
-    parser::{expr::parse_expr, parse, utils::parse_parameters, ParseErrorData},
+    parser::{expr::parse_expr, parse_tks, utils::parse_parameters, ParseErrorData},
     text_data::{BorrowedTextRange, TextRange},
     tokenizer::{Token, TokenData, TokensUtils},
     Boxxable,
@@ -113,7 +113,7 @@ fn parse_function_declaration<'a>(tokens: &'a [Token]) -> Result<(Node<'a>, usiz
             TextRange::from(tokens),
         ))?;
 
-    let body = parse(&tokens[end_parenthesis + 2..end_curly])?;
+    let body = parse_tks(&tokens[end_parenthesis + 2..end_curly])?;
 
     let text_range = BorrowedTextRange::from(&tokens[0..=end_curly]);
     let data = NodeData::FunctionDeclaration(identifier, parameters, body).to_box();
@@ -135,7 +135,7 @@ fn parse_if<'a>(tokens: &'a [Token]) -> Result<(Node<'a>, usize), ParseError> {
         TextRange::from(tokens),
     ))?;
     let condition = parse_expr(&tokens[1..start_curly])?;
-    let body = parse(&tokens[start_curly + 1..end_curly])?;
+    let body = parse_tks(&tokens[start_curly + 1..end_curly])?;
 
     let (else_node, used) =
         if let Some(TokenData::Else) = tokens.get(end_curly + 1).map(|tk| &tk.data) {
@@ -158,7 +158,7 @@ fn parse_if<'a>(tokens: &'a [Token]) -> Result<(Node<'a>, usize), ParseError> {
                 TextRange::from(tokens),
             ))?;
 
-            let else_body = parse(&tokens[else_start_curly + 1..else_end_curly])?;
+            let else_body = parse_tks(&tokens[else_start_curly + 1..else_end_curly])?;
             let text_range = BorrowedTextRange::from(&tokens[end_curly + 1..=else_end_curly]);
             let data = NodeData::Else(else_body).to_box();
 

@@ -28,6 +28,7 @@ pub enum NodeData<'a> {
     ModAccess(Node<'a>, Node<'a>),
     ArrayAccess(Node<'a>, Node<'a>),
     Neg(Node<'a>),
+    Type
 }
 
 #[derive(Debug)]

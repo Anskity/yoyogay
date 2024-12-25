@@ -1,6 +1,6 @@
 use crate::ast::{PropertyAccessType, OperatorType, VariableModificationType};
 use crate::parser::utils::delimiter_checker::DelimiterChecker;
-use crate::text_data::{TextPos, TextRange};
+use crate::text_data::{BorrowedTextRange, TextPos, TextRange};
 use crate::Boxxable;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -160,6 +160,8 @@ impl ToString for Token {
             TokenData::Fn => "fn".to_string(),
             TokenData::If => "if".to_string(),
             TokenData::Else => "else".to_string(),
+            TokenData::GreaterThan => ">".to_string(),
+            TokenData::LessThan => "<".to_string(),
             TokenData::Identifier(id) => id.clone(),
             TokenData::NumericLiteral(num) => num.to_string(),
         }
@@ -179,6 +181,9 @@ pub enum TokenData {
     DecreaseBy,
     MultiplyBy,
     DivideBy,
+
+    GreaterThan,
+    LessThan,
 
     OpenParenthesis,
     CloseParenthesis,
@@ -243,8 +248,14 @@ impl AsRef<TokenData> for TokenData {
 }
 
 #[derive(Debug)]
-pub enum TokenizeError {
+pub enum TokenizeErrorData {
     UnknownCharacter(char),
+}
+
+#[derive(Debug)]
+pub struct TokenizeError {
+    pub data: TokenizeErrorData,
+    pub text_range: TextRange,
 }
 
 pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
@@ -277,7 +288,12 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
         let recognizer = recognizers
             .iter()
             .find(|rec| rec.recognize(&src[ptr..]))
-            .ok_or_else(|| TokenizeError::UnknownCharacter(chr.clone()))?;
+            .ok_or_else(|| {
+                TokenizeError {
+                    data: TokenizeErrorData::UnknownCharacter(chr.clone()),
+                    text_range: TextRange::from((line.clone(), pos.clone())),
+                }
+            })?;
         let (token_data, numb) = recognizer.get_token(&src[ptr..]);
         assert_ne!(numb, 0);
 
@@ -399,6 +415,8 @@ impl SymbolRecognizer {
                 (";".to_string(), TokenData::Semilicon),
                 ("|".to_string(), TokenData::Pipe),
                 (".".to_string(), TokenData::Dot),
+                (">".to_string(), TokenData::GreaterThan),
+                ("<".to_string(), TokenData::LessThan),
             ]),
         }
     }

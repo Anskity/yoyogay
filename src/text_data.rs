@@ -49,11 +49,28 @@ impl<'a> From<&'a [Token]> for BorrowedTextRange<'a> {
     }
 }
 
+impl From<(usize, usize)> for TextRange {
+    fn from((line, pos): (usize, usize)) -> Self {
+        TextRange {
+            start: TextPos {line, pos},
+            end: TextPos {line, pos},
+        }
+    }
+}
+
 impl<'a> From<&'a Token> for BorrowedTextRange<'a> {
     fn from(value: &'a Token) -> Self {
         BorrowedTextRange {
             start: &value.text_range.start,
             end: &value.text_range.end,
+        }
+    }
+}
+impl<'a> From<(&'a Token, &'a Token)> for BorrowedTextRange<'a> {
+    fn from(value: (&'a Token, &'a Token)) -> Self {
+        BorrowedTextRange {
+            start: &value.0.text_range.start,
+            end: &value.1.text_range.end,
         }
     }
 }

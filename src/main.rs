@@ -1,4 +1,4 @@
-use yoyogay::{gamemaker::GameMakerProject, organizer::{OrganizeError, YoyogayProject}, parser::{parse, ParseError}, tokenizer::{tokenize, TokenizeError}};
+use yoyogay::{gamemaker::GameMakerProject, organizer::{OrganizeError, YoyogayProject}, parser::{parse_tks, ParseError}, tokenizer::{tokenize, TokenizeError}};
 
 #[derive(Debug)]
 enum Error {

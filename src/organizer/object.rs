@@ -1,30 +1,46 @@
 use std::{collections::HashMap, ffi::OsStr, fs::File, io::{BufRead, BufReader}, path::PathBuf};
 
+use crate::{ast::Node, parser::{parse_tks, ParseError}, tokenizer::{tokenize, Token, TokenizeError}};
+
 use super::OrganizeError;
 
 #[derive(Debug)]
-pub struct Object {
+pub struct Object<'a> {
     pub id: String,
-    pub create: Option<String>,
-    pub step: Option<String>,
-    pub draw: Option<String>,
-    pub draw_gui: Option<String>,
-    pub clean_up: Option<String>,
+    pub create: Option<(Node<'a>, Vec<Token>)>,
+    pub step: Option<(Node<'a>, Vec<Token>)>,
+    pub draw: Option<(Node<'a>, Vec<Token>)>,
+    pub draw_gui: Option<(Node<'a>, Vec<Token>)>,
+    pub clean_up: Option<(Node<'a>, Vec<Token>)>,
 }
 
 #[derive(Debug)]
 pub enum ObjectParseError {
     NoIdentification(String),
     UnknownEvent(String, usize),
+    TokenizeError(TokenizeError),
+    ParseError(ParseError),
 }
 
-impl Into<OrganizeError> for ObjectParseError {
-    fn into(self) -> OrganizeError {
-        OrganizeError::ObjectParseError(self)
+impl Into<ObjectParseError> for TokenizeError {
+    fn into(self) -> ObjectParseError {
+        ObjectParseError::TokenizeError(self)
     }
 }
 
-pub fn organize_objects(path: PathBuf) -> Result<Vec<Object>, OrganizeError> {
+impl<T:Into<ObjectParseError>> From<T> for OrganizeError {
+    fn from(value: T) -> OrganizeError {
+        value.into().into()
+    }
+}
+
+impl Into<ObjectParseError> for ParseError {
+    fn into(self) -> ObjectParseError {
+        ObjectParseError::ParseError(self)
+    }
+}
+
+pub fn organize_objects<'a>(path: PathBuf) -> Result<Vec<Object<'a>>, OrganizeError> {
     assert!(path.exists());
     assert!(path.is_dir());
     assert_eq!(path.file_name(), Some(OsStr::new("objects")));
@@ -122,6 +138,42 @@ pub fn organize_objects(path: PathBuf) -> Result<Vec<Object>, OrganizeError> {
                 }
             }
         }
+
+        macro_rules! parse_event {
+            ($event:ident) => {{
+                let event_tokens: Option<Result<Vec<Token>, TokenizeError>> = if let Some(src) = &$event {
+                    Some(tokenize(src))
+                } else {
+                    None
+                };
+
+                let event_tokens: Option<Vec<Token>> = if let Some(res) = event_tokens {
+                    Some(res?)
+                } else {
+                    None
+                };
+
+                let event: Option<Node> = if let Some(tks) = event_tokens {
+                    Some(parse_tks(&tks)?)
+                } else {
+                    None
+                };
+
+                (event, event_tokens)
+            }}
+        }
+
+        macro_rules! change_option {
+            ($event:ident) => {
+                
+            };
+        }
+
+        let create: Option<(Node, Vec<Token>)> = parse_event!(create);
+        let step: Option<(Node, Vec<Token>)> = parse_event!(step);
+        let draw: Option<(Node, Vec<Token>)> = parse_event!(draw);
+        let draw_gui: Option<(Node, Vec<Token>)> = parse_event!(draw_gui);
+        let clean_up: Option<(Node, Vec<Token>)> = parse_event!(clean_up);
         
         let object = Object {
             id,

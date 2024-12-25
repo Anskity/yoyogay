@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 pub mod object;
+pub mod info;
 
 #[derive(Debug)]
 pub struct YoyogayProject {

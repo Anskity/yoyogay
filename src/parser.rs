@@ -4,12 +4,13 @@ use utils::delimiter_checker::DelimiterCheckerError;
 use crate::{
     ast::{Node, NodeData},
     text_data::{BorrowedTextRange, TextRange},
-    tokenizer::{Token, TokenData},
+    tokenizer::{tokenize, Token, TokenData, TokenizeError},
     Boxxable,
 };
 
 pub mod expr;
 pub mod stmt;
+pub mod types;
 pub mod utils;
 
 #[derive(Debug)]
@@ -57,9 +58,17 @@ pub enum ParseErrorData {
     UnclosedParenthesis,
     UnclosedCurly,
     UnexpectedEOF,
+    TokenizeError(TokenizeError),
 }
 
-pub fn parse<'a>(tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
+impl From<TokenizeError> for ParseError {
+    fn from(value: TokenizeError) -> Self {
+        let text_range = value.text_range.clone();
+        ParseError::new(ParseErrorData::TokenizeError(value), text_range)
+    }
+}
+
+pub fn parse_tks<'a>(tokens: &'a [Token]) -> Result<Node<'a>, ParseError> {
     let mut statements: Vec<Node<'a>> = Vec::new();
     let mut ptr: usize = 0;
 
